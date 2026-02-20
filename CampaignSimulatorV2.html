@@ -1,12 +1,886 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="it">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Campaign Simulator V2</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Campaign Cost Simulator</title>
+
+  <!-- Tailwind -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <style>
+    .tabular-nums { font-variant-numeric: tabular-nums; }
+    thead.sticky-header th {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  background: #f8fafc;
+  backdrop-filter: blur(4px);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.06);
+}
+/* --- SIDEBAR LATERALE --- */
+.sidebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 260px;
+  height: 100vh;
+  background: white;
+  border-right: 1px solid #e5e7eb;
+  padding: 20px;
+  overflow-y: auto;
+  box-shadow: 2px 0 6px rgba(0,0,0,0.05);
+  z-index: 50;
+}
+
+.sidebar h2 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+
+.sidebar .input-group {
+  margin-bottom: 16px;
+}
+
+.sidebar label {
+  font-size: 0.75rem;
+  color: #555;
+}
+
+.sidebar input,
+.sidebar select {
+  width: 100%;
+  margin-top: 4px;
+  padding: 6px 8px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 0.85rem;
+}
+
+.sidebar button {
+  width: 100%;
+  margin-top: 10px;
+}
+/* UI upgrade — tabella più leggibile */
+#payoutTable tbody tr:hover {
+  background: #eef4ff;
+}
+
+#payoutTable td,
+#payoutTable th {
+  border-bottom: 1px solid #e5e7eb;
+}
+
+#payoutTable input {
+  transition: background 0.2s, border-color 0.2s;
+}
+
+#payoutTable input:focus {
+  background: #fff;
+  border-color: #003DA4;
+}
+/* UI upgrade — KPI cards */
+.kpi-card {
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.kpi-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+}
+/* UI upgrade — pulsanti */
+button {
+  transition: background 0.2s, transform 0.1s;
+}
+
+button:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+button:active:not(:disabled) {
+  transform: translateY(0);
+}
+/* UI upgrade — grafico */
+#prizeChart {
+  background: white;
+  border-radius: 12px;
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.04);
+  padding: 8px;
+}
+/* UI upgrade — progress bar */
+#probTotalBar {
+  transition: width 0.3s ease;
+}
+  </style>
 </head>
-<body>
-    <h1>Welcome to the Campaign Simulator V2</h1>
-    <p>This is a simulation tool for campaign management.</p>
+
+<body class="min-h-screen w-full bg-[#f3f3f3] text-[#0f0f0f]">
+
+<!-- SIDEBAR -->
+<div class="sidebar">
+  <h2>Campaign Inputs</h2>
+
+  <div class="input-group">
+    <label>Operator / Network</label>
+    <input id="operatorName">
+  </div>
+
+  <div class="input-group">
+    <label>Bet amount (daily)</label>
+    <input id="betAmountDaily">
+  </div>
+
+  <div class="input-group">
+    <label>Campaign duration (days)</label>
+    <input id="campaignDays">
+  </div>
+
+  <div class="input-group">
+    <label>Daily actives</label>
+    <input id="dailyActives">
+  </div>
+
+  <div class="input-group">
+    <label>Theoretical margin</label>
+    <input id="theoreticalMargin">
+  </div>
+
+  <div class="input-group">
+    <label>Trigger rate value</label>
+    <input id="triggerRateValue">
+  </div>
+
+  <div class="input-group">
+    <label>Preset</label>
+    <select id="presetSelect">
+      <option value="standard">Standard</option>
+      <option value="flat">Flat distribution</option>
+      <option value="highvalue">High-value focus</option>
+    </select>
+  </div>
+
+  <button id="resetConfig" class="px-3 py-2 bg-gray-100 border rounded">Reset</button>
+  <button id="exportCsv" class="px-3 py-2 bg-gray-100 border rounded">Export CSV</button>
+</div>
+
+<!-- MAIN CONTENT SHIFTED RIGHT -->
+<div style="margin-left: 280px;" class="p-6 md:p-10 space-y-8">
+
+  <!-- TOOL OVERVIEW -->
+  <section class="rounded-2xl shadow-sm border border-[#0f0f0f]/10 bg-white p-6 space-y-6">
+    <div class="flex items-center justify-between">
+      <h2 class="text-xl font-semibold">Tool overview</h2>
+      <div class="flex gap-2">
+        <button id="resetConfig"
+          class="px-3 py-1 rounded-lg border border-gray-300 text-xs hover:bg-gray-50">
+          Reset to default
+        </button>
+      </div>
+    </div>
+
+    <div class="grid md:grid-cols-3 gap-4">
+      <div class="space-y-2">
+        <div class="font-medium">Purpose</div>
+        <div class="text-sm text-gray-500">
+          Tailor the prizepool to client traffic and control campaign payout and bonus pressure.
+        </div>
+      </div>
+
+      <div class="space-y-2">
+        <div class="font-medium">How it works</div>
+        <div class="text-sm text-gray-500">
+          Traffic (bet volume) drives reward volume (trigger rate). Prize distribution determines expected cost.
+        </div>
+      </div>
+
+      <div class="rounded-xl border border-[#003DA4]/30 bg-[#003DA4]/5 p-3 space-y-2">
+        <div class="font-medium text-[#003DA4]">What to do</div>
+        <ol class="list-decimal ml-4 text-sm text-[#0f0f0f] space-y-1">
+          <li>Insert main inputs (Bet amount, Trigger rate value, Theoretical margin).</li>
+          <li>Adjust Prize and Probability distribution if needed.</li>
+          <li>Review Forecast KPIs and Results to validate campaign performance.</li>
+        </ol>
+      </div>
+    </div>
+
+    <hr class="border-gray-200" />
+
+   
+  <!-- FORECAST KPIs -->
+  <section class="rounded-2xl shadow-sm border border-[#0f0f0f]/10 bg-white p-6">
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="text-xl font-semibold">Forecast KPIs</h2>
+    </div>
+    <div class="grid md:grid-cols-4 gap-4" id="forecastKpis"></div>
+  </section>
+
+  <!-- PAYOUT TABLE -->
+  <section class="rounded-2xl shadow-sm border border-[#0f0f0f]/10 bg-white p-6 space-y-4">
+    <div class="flex items-center justify-between">
+      <h2 class="text-xl font-semibold">Campaign payout</h2>
+      <div class="flex gap-2 items-center">
+        <label class="text-xs text-gray-600">Preset</label>
+        <select id="presetSelect"
+                class="border rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-[#003DA4] focus:border-[#003DA4]">
+          <option value="standard">Standard</option>
+          <option value="flat">Flat distribution</option>
+          <option value="highvalue">High-value focus</option>
+        </select>
+        <button id="exportCsv"
+          class="px-3 py-1 bg-white border border-gray-300 rounded-lg text-xs hover:bg-gray-50">
+          Export CSV
+        </button>
+      </div>
+    </div>
+
+    <div class="text-xs text-gray-500">
+      Probabilities are percentages and must sum to <span class="font-medium text-[#0f0f0f]">100.00%</span>.
+      Each cell is capped by the remaining percentage.
+    </div>
+
+    <!-- PROBABILITY PROGRESS BAR -->
+    <div class="mt-2 space-y-1">
+      <div class="flex justify-between text-[11px] text-gray-500">
+        <span>Probability total</span>
+        <span id="probTotalLabel">0%</span>
+      </div>
+      <div class="w-full h-2 rounded-full bg-gray-200 overflow-hidden">
+        <div id="probTotalBar" class="h-2 rounded-full bg-[#003DA4]" style="width: 0%;"></div>
+      </div>
+      <div id="probWarning" class="text-[11px] mt-1"></div>
+    </div>
+
+    <button id="addRow"
+      class="px-3 py-1 bg-[#003DA4] text-white rounded-lg text-sm hover:bg-[#002f7a] disabled:opacity-40 disabled:cursor-not-allowed">
+      + Add prize tier
+    </button>
+
+    <div class="overflow-x-auto rounded-xl border border-[#0f0f0f]/10 bg-white max-h-80">
+      <table class="w-full text-sm" id="payoutTable"></table>
+    </div>
+
+    <!-- CHART -->
+    <div class="mt-4">
+      <h3 class="text-sm font-medium mb-2">Prize distribution chart</h3>
+      <canvas id="prizeChart" height="160" class="w-full bg-white rounded-xl border border-[#0f0f0f]/10"></canvas>
+    </div>
+  </section>
+
+  <!-- RESULTS -->
+  <section class="rounded-2xl shadow-sm border border-[#003DA4] bg-[#003DA4]/5 overflow-hidden">
+    <div class="h-2 w-full bg-[#003DA4]"></div>
+    <div class="p-6 space-y-4">
+      <div class="flex items-center justify-between">
+        <h2 class="text-xl font-semibold text-[#003DA4]">Results</h2>
+      </div>
+      <div class="grid md:grid-cols-3 gap-4" id="resultsKpis"></div>
+    </div>
+  </section>
+
+  <div class="text-xs text-gray-500">
+    Prize formats on blur. Probability is entered as % and is capped by remaining so total never exceeds 100%.
+  </div>
+
+</div>
+
+<script>
+  // ---------- Formatting helpers ----------
+  function fmtEUR0(n) {
+    return new Intl.NumberFormat(undefined, {
+      style: "currency",
+      currency: "EUR",
+      maximumFractionDigits: 0
+    }).format(Number.isFinite(+n) ? +n : 0);
+  }
+
+  function fmtEUR2(n) {
+    return new Intl.NumberFormat(undefined, {
+      style: "currency",
+      currency: "EUR",
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    }).format(Number.isFinite(+n) ? +n : 0);
+  }
+
+  function fmtEUR4(n) {
+    return new Intl.NumberFormat(undefined, {
+      style: "currency",
+      currency: "EUR",
+      minimumFractionDigits: 4,
+      maximumFractionDigits: 4
+    }).format(Number.isFinite(+n) ? +n : 0);
+  }
+
+  function fmtPct(n) {
+    return new Intl.NumberFormat(undefined, {
+      style: "percent",
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    }).format(Number.isFinite(+n) ? +n : 0);
+  }
+
+  function fmtNum(n, maxFrac = 2) {
+    return new Intl.NumberFormat(undefined, {
+      maximumFractionDigits: maxFrac
+    }).format(Number.isFinite(+n) ? +n : 0);
+  }
+
+  function parseNumber(raw) {
+    if (!raw) return 0;
+    const cleaned = raw.toString().replace(/[^0-9.,-]/g, "").replace(/,/g, ".");
+    const n = Number(cleaned);
+    return Number.isFinite(n) ? n : 0;
+  }
+
+  function clamp(v, min, max) {
+    if (!Number.isFinite(v)) return min;
+    return Math.min(max, Math.max(min, v));
+  }
+
+  // ---------- Default payout rows (MVP baseline) ----------
+  const defaultPayoutRows = [
+    { id: "p1",   prizeEUR: 1,   probability: 0.8449 },
+    { id: "p5",   prizeEUR: 5,   probability: 0.05 },
+    { id: "p10",  prizeEUR: 10,  probability: 0.04 },
+    { id: "p20",  prizeEUR: 20,  probability: 0.03 },
+    { id: "p30",  prizeEUR: 30,  probability: 0.02 },
+    { id: "p50",  prizeEUR: 50,  probability: 0.01 },
+    { id: "p100", prizeEUR: 100, probability: 0.005 },
+    { id: "p500", prizeEUR: 500, probability: 0.0001 }
+  ];
+
+  let payoutRows = JSON.parse(JSON.stringify(defaultPayoutRows));
+
+  // ---------- State ----------
+  let operatorName = "NAME";
+  let betAmountDaily = 100000;
+  let campaignDays = 7;
+  let dailyActives = 3000;
+  let theoreticalMargin = 0.05; // decimal
+  let triggerRateValue = 300;
+
+  // ---------- DOM refs ----------
+  const elOperator = document.getElementById("operatorName");
+  const elBet = document.getElementById("betAmountDaily");
+  const elDays = document.getElementById("campaignDays");
+  const elActives = document.getElementById("dailyActives");
+  const elMargin = document.getElementById("theoreticalMargin");
+  const elTrigger = document.getElementById("triggerRateValue");
+
+  const elForecast = document.getElementById("forecastKpis");
+  const elResults = document.getElementById("resultsKpis");
+  const elTable = document.getElementById("payoutTable");
+  const elAddRow = document.getElementById("addRow");
+
+  const elProbBar = document.getElementById("probTotalBar");
+  const elProbLabel = document.getElementById("probTotalLabel");
+  const elProbWarning = document.getElementById("probWarning");
+
+  const elPreset = document.getElementById("presetSelect");
+  const elExportCsv = document.getElementById("exportCsv");
+  const elReset = document.getElementById("resetConfig");
+
+  const chartCanvas = document.getElementById("prizeChart");
+  const chartCtx = chartCanvas.getContext("2d");
+
+  // ---------- Local storage keys ----------
+  const LS_KEY = "campaign-simulator-v1";
+
+  function saveState() {
+    const state = {
+      operatorName,
+      betAmountDaily,
+      campaignDays,
+      dailyActives,
+      theoreticalMargin,
+      triggerRateValue,
+      payoutRows
+    };
+    try {
+      localStorage.setItem(LS_KEY, JSON.stringify(state));
+    } catch (e) {
+      // ignore
+    }
+  }
+
+  function loadState() {
+    try {
+      const raw = localStorage.getItem(LS_KEY);
+      if (!raw) return;
+      const s = JSON.parse(raw);
+      if (!s || typeof s !== "object") return;
+      operatorName = s.operatorName ?? operatorName;
+      betAmountDaily = s.betAmountDaily ?? betAmountDaily;
+      campaignDays = s.campaignDays ?? campaignDays;
+      dailyActives = s.dailyActives ?? dailyActives;
+      theoreticalMargin = s.theoreticalMargin ?? theoreticalMargin;
+      triggerRateValue = s.triggerRateValue ?? triggerRateValue;
+      if (Array.isArray(s.payoutRows) && s.payoutRows.length >= 2 && s.payoutRows.length <= 20) {
+        payoutRows = s.payoutRows;
+      }
+    } catch (e) {
+      // ignore
+    }
+  }
+
+  function resetState() {
+    operatorName = "NAME";
+    betAmountDaily = 100000;
+    campaignDays = 7;
+    dailyActives = 3000;
+    theoreticalMargin = 0.05;
+    triggerRateValue = 300;
+    payoutRows = JSON.parse(JSON.stringify(defaultPayoutRows));
+    saveState();
+    syncInputsFromState();
+    render();
+  }
+
+  // ---------- Init from localStorage ----------
+  loadState();
+
+  // ---------- Init inputs ----------
+  function syncInputsFromState() {
+    elOperator.value = operatorName;
+    elBet.value = fmtEUR0(betAmountDaily);
+    elDays.value = String(campaignDays);
+    elActives.value = String(dailyActives);
+    elMargin.value = (theoreticalMargin * 100).toFixed(2) + "%";
+    elTrigger.value = fmtEUR0(triggerRateValue);
+  }
+  syncInputsFromState();
+
+  // ---------- Input handlers ----------
+  elOperator.addEventListener("input", () => {
+    operatorName = elOperator.value;
+    saveState();
+  });
+
+  elBet.addEventListener("focus", () => {
+    elBet.value = String(betAmountDaily);
+  });
+  elBet.addEventListener("blur", () => {
+    const n = parseNumber(elBet.value);
+    betAmountDaily = Math.max(0, n);
+    elBet.value = fmtEUR0(betAmountDaily);
+    saveState();
+    render();
+  });
+
+  elDays.addEventListener("input", () => {
+    const n = parseNumber(elDays.value);
+    campaignDays = Math.max(0, Math.floor(n));
+    elDays.value = String(campaignDays);
+    saveState();
+    render();
+  });
+
+  elActives.addEventListener("input", () => {
+    const n = parseNumber(elActives.value);
+    dailyActives = Math.max(0, Math.floor(n));
+    elActives.value = String(dailyActives);
+    saveState();
+    render();
+  });
+
+  elMargin.addEventListener("focus", () => {
+    elMargin.value = String((theoreticalMargin * 100).toFixed(2));
+  });
+  elMargin.addEventListener("blur", () => {
+    let n = parseNumber(elMargin.value);
+    n = clamp(n, 0, 100);
+    theoreticalMargin = n / 100;
+    elMargin.value = n.toFixed(2) + "%";
+    saveState();
+    render();
+  });
+
+  elTrigger.addEventListener("focus", () => {
+    elTrigger.value = String(triggerRateValue);
+  });
+  elTrigger.addEventListener("blur", () => {
+    const n = parseNumber(elTrigger.value);
+    triggerRateValue = Math.max(1, n);
+    elTrigger.value = fmtEUR0(triggerRateValue);
+    saveState();
+    render();
+  });
+
+  // ---------- Helpers ----------
+  function remainingFor(id) {
+    const sumOthers = payoutRows.reduce((acc, r) => r.id === id ? acc : acc + r.probability, 0);
+    return clamp(1 - sumOthers, 0, 1);
+  }
+
+  function kpi(label, value, sub, highlight = false, red = false) {
+    const badge = red
+      ? '<span class="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-red-100 text-red-700">High</span>'
+      : "";
+    return `
+      <div class="kpi-card rounded-2xl border p-4 shadow-sm ${highlight ? "bg-[#003DA4] text-white border-[#003DA4]" : "border-[#0f0f0f]/10 bg-white"}">
+        <div class="text-xs ${highlight ? "text-white/80" : "text-gray-500"}">${label}</div>
+        <div class="flex items-baseline mt-1">
+          <div class="text-2xl font-semibold tracking-tight tabular-nums ${red ? "text-[#d61f2c]" : ""}">${value}</div>
+          ${badge}
+        </div>
+        <div class="text-[11px] mt-2 ${highlight ? "text-white/80" : "text-gray-500"}">${sub}</div>
+      </div>
+    `;
+  }
+
+  function payoutRowHTML(r, index) {
+    const probPctStr = (r.probability * 100).toFixed(4).replace(/0+$/,'').replace(/\.$/,'');
+    const maxProb = remainingFor(r.id);
+    const rowBg = index % 2 === 0 ? "bg-white" : "bg-gray-50";
+    return `
+      <tr class="border-t border-gray-200 ${rowBg}">
+        <td class="p-2">
+          <input data-id="${r.id}" data-type="prize"
+                 class="w-full bg-[#fff7d6] border border-[#003DA4]/20 rounded p-1 text-right text-sm focus:outline-none focus:ring-1 focus:ring-[#003DA4]"
+                 value="${fmtEUR2(r.prizeEUR)}">
+        </td>
+        <td class="p-3 tabular-nums text-right" title="Weight = Rewards assigned × Probability">${fmtNum(r.weight, 2)}</td>
+        <td class="p-3 tabular-nums text-right" title="EV = Prize × Probability">${fmtEUR4(r.ev)}</td>
+        <td class="p-2">
+          <div class="space-y-1">
+            <input data-id="${r.id}" data-type="prob"
+                   class="w-full bg-[#fff7d6] border border-[#003DA4]/20 rounded p-1 text-right text-sm focus:outline-none focus:ring-1 focus:ring-[#003DA4]"
+                   value="${probPctStr}">
+            <div class="text-[11px] text-gray-500">
+              Max: <span class="font-medium text-[#0f0f0f]">${fmtNum(maxProb * 100, 4)}%</span> (remaining)
+            </div>
+          </div>
+        </td>
+        <td class="p-3 tabular-nums text-right" title="Total = Weight × Prize">${fmtEUR0(r.totalCost)}</td>
+        <td class="p-3 text-center">
+          <button data-id="${r.id}"
+                  class="removeRow text-red-600 hover:text-red-800 text-sm disabled:opacity-40 disabled:cursor-not-allowed"
+                  title="Remove this prize tier">
+            🗑
+          </button>
+        </td>
+      </tr>
+    `;
+  }
+
+  // ---------- Add / Remove row ----------
+  elAddRow.addEventListener("click", () => {
+    if (payoutRows.length >= 20) return;
+
+    const sumProb = payoutRows.reduce((acc, r) => acc + r.probability, 0);
+    const remaining = Math.max(0, 1 - sumProb);
+    const newProb = remaining / 2;
+
+    const newRow = {
+      id: "p" + Math.random().toString(36).slice(2, 7),
+      prizeEUR: 0,
+      probability: newProb
+    };
+
+    payoutRows.push(newRow);
+    saveState();
+    render();
+  });
+
+  // ---------- Preset distributions ----------
+  function applyPreset(name) {
+    if (name === "flat") {
+      const n = payoutRows.length;
+      if (n === 0) return;
+      const p = 1 / n;
+      payoutRows = payoutRows.map(r => ({ ...r, probability: p }));
+    } else if (name === "highvalue") {
+      const sorted = [...payoutRows].sort((a, b) => a.prizeEUR - b.prizeEUR);
+      const n = sorted.length;
+      let totalWeight = 0;
+      const weights = sorted.map((r, i) => {
+        const w = i + 1;
+        totalWeight += w;
+        return w;
+      });
+      payoutRows = sorted.map((r, i) => ({
+        ...r,
+        probability: weights[i] / totalWeight
+      }));
+    } else {
+      payoutRows = JSON.parse(JSON.stringify(defaultPayoutRows));
+    }
+    saveState();
+    render();
+  }
+
+  elPreset.addEventListener("change", () => {
+    applyPreset(elPreset.value);
+  });
+
+  // ---------- Export CSV ----------
+  elExportCsv.addEventListener("click", () => {
+    const header = ["Prize", "Probability", "Weight", "EV", "TotalCost"];
+    const rows = [];
+    const rewards = triggerRateValue !== 0 ? betAmountDaily / triggerRateValue : 0;
+
+    payoutRows.forEach(r => {
+      const weight = rewards * r.probability;
+      const ev = r.prizeEUR * r.probability;
+      const totalCost = weight * r.prizeEUR;
+      rows.push([
+        r.prizeEUR,
+        (r.probability * 100).toFixed(6),
+        weight.toFixed(4),
+        ev.toFixed(6),
+        totalCost.toFixed(2)
+      ]);
+    });
+
+    const csv = [header.join(","), ...rows.map(r => r.join(","))].join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "campaign_payout.csv";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  });
+
+  // ---------- Reset ----------
+  elReset.addEventListener("click", () => {
+    resetState();
+  });
+
+  // ---------- Probability bar + warning ----------
+  function updateProbabilityBar(sumProb) {
+    const pct = sumProb * 100;
+    const clamped = Math.max(0, Math.min(100, pct));
+
+    elProbBar.style.width = clamped + "%";
+    elProbLabel.textContent = fmtNum(pct, 2) + "%";
+
+    if (Math.abs(pct - 100) < 0.01) {
+      elProbWarning.textContent = "Distribution is balanced at 100%.";
+      elProbWarning.className = "text-[11px] text-green-600";
+    } else if (pct > 100) {
+      elProbWarning.textContent = "Total probability exceeds 100%. Adjust values.";
+      elProbWarning.className = "text-[11px] text-red-600";
+    } else {
+      elProbWarning.textContent = "Total probability is below 100%. You still have room to allocate.";
+      elProbWarning.className = "text-[11px] text-amber-600";
+    }
+  }
+
+  // ---------- Chart ----------
+  function renderChart() {
+  const dpr = window.devicePixelRatio || 1;
+  const rect = chartCanvas.getBoundingClientRect();
+
+  chartCanvas.width = rect.width * dpr;
+  chartCanvas.height = rect.height * dpr;
+
+  const ctx = chartCtx;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.scale(dpr, dpr);
+
+  const width = rect.width;
+  const height = rect.height;
+  ctx.clearRect(0, 0, width, height);
+
+  const labels = payoutRows.map(r => r.prizeEUR);
+  const probs = payoutRows.map(r => r.probability);
+
+  if (labels.length === 0) return;
+
+  const maxProb = Math.max(...probs, 0.0001);
+  const padding = 32;
+  const chartWidth = width - padding * 2;
+  const chartHeight = height - padding * 2;
+
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, width, height);
+
+  ctx.strokeStyle = "#e5e7eb";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(padding, padding);
+  ctx.lineTo(padding, padding + chartHeight);
+  ctx.lineTo(padding + chartWidth, padding + chartHeight);
+  ctx.stroke();
+
+  ctx.fillStyle = "#9ca3af";
+  ctx.font = "10px system-ui";
+  ctx.textAlign = "right";
+  const steps = 4;
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    const y = padding + chartHeight - t * chartHeight;
+    const val = maxProb * t * 100;
+    ctx.fillText(val.toFixed(1) + "%", padding - 4, y + 3);
+  }
+
+  const barWidth = (chartWidth / labels.length) * 0.6;
+  const gap = (chartWidth / labels.length) * 0.4;
+
+  probs.forEach((p, i) => {
+    const x = padding + i * (barWidth + gap) + gap / 2;
+    const h = (p / maxProb) * (chartHeight - 10);
+    const y = padding + chartHeight - h;
+
+    ctx.fillStyle = "#003DA4";
+    const radius = 4;
+    ctx.beginPath();
+    ctx.moveTo(x, y + h);
+    ctx.lineTo(x, y + radius);
+    ctx.quadraticCurveTo(x, y, x + radius, y);
+    ctx.lineTo(x + barWidth - radius, y);
+    ctx.quadraticCurveTo(x + barWidth, y, x + barWidth, y + radius);
+    ctx.lineTo(x + barWidth, y + h);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.fillStyle = "#4b5563";
+    ctx.font = "10px system-ui";
+    ctx.textAlign = "center";
+    ctx.fillText(labels[i], x + barWidth / 2, padding + chartHeight + 12);
+  });
+}
+
+  // ---------- Render functions ----------
+  function renderForecast() {
+    const theoreticalGGR = betAmountDaily * theoreticalMargin;
+    const totGGR = theoreticalGGR * campaignDays;
+    const rewardsAssigned = triggerRateValue !== 0 ? betAmountDaily / triggerRateValue : 0;
+    const pctRewardedPlayers = dailyActives !== 0 ? rewardsAssigned / dailyActives : 0;
+
+    elForecast.innerHTML = `
+      ${kpi("Theoretical GGR", fmtEUR0(theoreticalGGR), "Bet daily × Margin")}
+      ${kpi("Total GGR", fmtEUR0(totGGR), "Theoretical GGR × Days")}
+      ${kpi("Rewards assigned", fmtNum(rewardsAssigned, 0), "Bet daily ÷ Trigger rate")}
+      ${kpi("% rewarded players", fmtPct(pctRewardedPlayers), "Rewards ÷ Daily actives", true)}
+    `;
+
+    return { theoreticalGGR, totGGR, rewardsAssigned };
+  }
+
+  function renderTable(forecast) {
+    const rewards = forecast.rewardsAssigned;
+
+    const rows = payoutRows.map(r => {
+      const weight = rewards * r.probability;
+      const ev = r.prizeEUR * r.probability;
+      const totalCost = weight * r.prizeEUR;
+      return { ...r, weight, ev, totalCost };
+    });
+
+    const sumWeight = rows.reduce((a, r) => a + r.weight, 0);
+    const sumEV = rows.reduce((a, r) => a + r.ev, 0);
+    const sumProb = rows.reduce((a, r) => a + r.probability, 0);
+    const sumTotal = rows.reduce((a, r) => a + r.totalCost, 0);
+
+    elTable.innerHTML = `
+      <thead class="bg-[#003DA4]/5 sticky-header">
+        <tr class="text-left text-xs text-gray-700">
+          <th class="p-3" title="Prize amount in EUR">Prize (€)</th>
+          <th class="p-3" title="Weight = Rewards assigned × Probability">Weight</th>
+          <th class="p-3" title="EV = Prize × Probability">EV (€)</th>
+          <th class="p-3" title="Probability of assigning this prize">Probability (%)</th>
+          <th class="p-3" title="Total cost for this prize tier">Tot.</th>
+          <th class="p-3 text-center">Remove</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows.map((r, i) => payoutRowHTML(r, i)).join("")}
+        <tr class="border-t bg-[#003DA4]/5 border-gray-200">
+          <td class="p-3 font-medium">Totals</td>
+          <td class="p-3 tabular-nums font-medium text-right">${fmtNum(sumWeight, 2)}</td>
+          <td class="p-3 tabular-nums font-medium text-right">${fmtEUR4(sumEV)}</td>
+          <td class="p-3 tabular-nums font-medium text-right">${fmtPct(sumProb)}</td>
+          <td class="p-3 tabular-nums font-medium text-right">${fmtEUR0(sumTotal)}</td>
+          <td class="p-3"></td>
+        </tr>
+      </tbody>
+    `;
+
+    updateProbabilityBar(sumProb);
+    attachRowEvents();
+
+    return { sumTotal };
+  }
+
+  function renderResults(forecast, payout) {
+    const dailyCampaignCost = payout.sumTotal;
+    const totalCampaignCost = dailyCampaignCost * campaignDays;
+    const bonusPressure = forecast.totGGR !== 0 ? totalCampaignCost / forecast.totGGR : 0;
+    const isHigh = bonusPressure > 0.2;
+
+    elResults.innerHTML = `
+      ${kpi("Daily campaign cost", fmtEUR0(dailyCampaignCost), "Σ Tot.")}
+      ${kpi("Total campaign cost", fmtEUR0(totalCampaignCost), "Daily cost × Days")}
+      ${kpi("Bonus pressure", fmtPct(bonusPressure), "Total cost ÷ Total GGR", false, isHigh)}
+    `;
+  }
+
+  function attachRowEvents() {
+    // Prize
+    document.querySelectorAll("[data-type='prize']").forEach(input => {
+      input.addEventListener("focus", () => {
+        const row = payoutRows.find(r => r.id === input.dataset.id);
+        input.value = String(row.prizeEUR);
+      });
+      input.addEventListener("blur", () => {
+        const row = payoutRows.find(r => r.id === input.dataset.id);
+        const n = Math.max(0, parseNumber(input.value));
+        row.prizeEUR = n;
+        input.value = fmtEUR2(n);
+        saveState();
+        render();
+      });
+    });
+
+    // Probability
+    document.querySelectorAll("[data-type='prob']").forEach(input => {
+      input.addEventListener("focus", () => {
+        const row = payoutRows.find(r => r.id === input.dataset.id);
+        input.value = (row.probability * 100).toFixed(4);
+      });
+      input.addEventListener("blur", () => {
+        const row = payoutRows.find(r => r.id === input.dataset.id);
+        let dec = parseNumber(input.value) / 100;
+        const maxAllowed = remainingFor(row.id);
+        dec = clamp(dec, 0, maxAllowed);
+        row.probability = dec;
+        input.value = (dec * 100).toFixed(4).replace(/0+$/,'').replace(/\.$/,'');
+        saveState();
+        render();
+      });
+    });
+
+    // Remove row
+    document.querySelectorAll(".removeRow").forEach(btn => {
+      btn.addEventListener("click", () => {
+        if (payoutRows.length <= 2) return;
+        const id = btn.dataset.id;
+        payoutRows = payoutRows.filter(r => r.id !== id);
+        saveState();
+        render();
+      });
+    });
+  }
+
+  function render() {
+    const forecast = renderForecast();
+    const payout = renderTable(forecast);
+    renderResults(forecast, payout);
+    renderChart();
+
+    elAddRow.disabled = payoutRows.length >= 20;
+    document.querySelectorAll(".removeRow").forEach(btn => {
+      btn.disabled = payoutRows.length <= 2;
+    });
+  }
+
+  render();
+</script>
 </body>
 </html>
